@@ -1,39 +1,63 @@
 // North : 0 , South : 1 , East : 2 , West : 3
 // tstraight:0 tLeft : 1 ; tright : 2   tabout : 3
-
-float Kp=175,Ki=0,Kd=100;
+# define MAX 100000
 float error=0, P=0, I=0, D=0, PID_value=0;
 float previous_error=0, previous_I=0;
 int sensor[5]={0, 0, 0, 0, 0};
-int initial_motor_speed=175;
+int initial_motor_speed=180;
 int left_motor_speed = 0;
 int right_motor_speed = 0;
 void calculate_pid();
 void motor_control();
+int flag = 0;
+int path[40][40];
+int nodeIndex;
+int sPath[40];
+int indexSpath=1;
+int parent = 0;
 char c;
-int xcod[100];
-int ycod[100];
-bool isdir[100][4];
-bool Sdir[100];
+int finalNode;
+int xcod[40];
+int ycod[40];
+bool isdir[40][4];
+bool Sdir[40];
 int top = 1;
 int presentx = 0 , presenty = 0 ;
-
+int parent1[40];
+int dirFromPrev[40][40]; 
 int thres = 15;
 
 int currentdirection = 0;
 
 void setup()
 {
+ pinMode(44,OUTPUT);
+ pinMode(53,INPUT); 
  pinMode(4,OUTPUT); //Left Motor Pin 1
  pinMode(5,OUTPUT); //Left Motor Pin 2
  pinMode(6,OUTPUT); //Right Motor Pin 1
  pinMode(7,OUTPUT);  //Right Motor Pin 2
+ digitalWrite(45,LOW);
+ xcod[0] = 0;
+ ycod[0] = 0;
+ top++;
  Serial.begin(9600); //Enable Serial Communications
 }
 
 void loop()
 {
+  //if(flag == 0){
   getNode(0);
+  Serial.println("I am in void loop");
+  delay(60000);
+  //}
+  /*if(digitalRead(53)==HIGH){
+    dijkstra();
+    final_shortest_path();
+    //Serial.println("djvh");
+  }*/
+  //Serial.println(digitalRead(53));
+  //digitalWrite(44,HIGH);
   //turnBack();
   //delay(5000);
   //delay(10000);
@@ -119,6 +143,7 @@ void read_sensor_values()
 
 void calculate_pid()
 {
+    float Kp=175,Ki=0,Kd=100;
     P = error;
     I = I + P;
     D = error-previous_error;
@@ -242,53 +267,45 @@ void turnRight() {
 }
 
 int updateNodeData(int inDir) {
-    Serial.print("Update node data");
-    Serial.println();
     delay(100);
     read_sensor_values();
     int nodeIndex = top;
     top++;
     xcod[nodeIndex] = presentx;
     ycod[nodeIndex] = presenty;
+    int x = xcod[nodeIndex]-xcod[parent];
+    int y = ycod[nodeIndex]-ycod[parent];
+    path[nodeIndex][parent] = sqrt(sq(x)+sq(y));//square root of ((xcod of nodeindex - xcod of parent)^2 + (ycod of nodeindex - ycod of parent)^2)  i.e., distance between two points
+    path[parent][nodeIndex] = sqrt(sq(x)+sq(y));//square root of ((xcod of nodeindex - xcod of parent)^2 + (ycod of nodeindex - ycod of parent)^2)  i.e., distance between two points
+    dirFromPrev[parent][nodeIndex] = inDir;
+    dirFromPrev[nodeIndex][parent] = oppDir(inDir);
+    parent = nodeIndex;
     isdir[nodeIndex][0] = false;
     isdir[nodeIndex][1] = false;
     isdir[nodeIndex][2] = false;
     isdir[nodeIndex][3] = false;
-    delay(10);
     /*Serial.print("sensor[0] = ");
     Serial.print(sensor[0]);
     Serial.print("sensor[4] = ");
     Serial.print(sensor[4]);
     Serial.println();*/
-    if( sensor[0] == 1 ){
-      isdir[nodeIndex][nextDir(currentdirection,1)] = true;
-      Serial.print("Value1  ");
-      Serial.print(isdir[nodeIndex][nextDir(currentdirection,1)]);
-      Serial.println();
-      }
-    if( sensor[4] == 1){
-      isdir[nodeIndex][nextDir(currentdirection,2)] = true;
-      Serial.print("Value2  ");
-      Serial.print(isdir[nodeIndex][nextDir(currentdirection,2)]);
-      Serial.println();
-      }
+    if( sensor[0] == 1 )isdir[nodeIndex][nextDir(currentdirection,1)] = true;
+    if( sensor[4] == 1)isdir[nodeIndex][nextDir(currentdirection,2)] = true;
     forwardSignal();
     delay(300);
     stopSignal();
     read_sensor_values();
-    if( sensor[2] == 1){
-      isdir[nodeIndex][inDir]= true;
-      Serial.print("Value3   ");
-      Serial.print(isdir[nodeIndex][inDir]);
-      Serial.println();
-      }
+    if( sensor[2] == 1)isdir[nodeIndex][inDir] = true;
     //add the goal condition
-
-    return nodeIndex;    
+    if((sensor[0]==1)&&(sensor[1]==1)&&(sensor[2]==1)&&(sensor[3]==1)&&(sensor[4]==1)){
+      flag=1;
+      finalNode = nodeIndex;
+    }
+    /*if(flag == 1 && nodeIndex == 0){
+      dijkstra();
+    }*/
+    return nodeIndex;
 }
-
-
-
 bool detectnode() {
   Serial.print("Node detecting ........");
   read_sensor_values();
@@ -310,6 +327,7 @@ void getBackPrevNode(int inDir){
   Serial.print("I am going to previous node");
   Serial.println();
   turnToDir(currentdirection, oppDir(inDir));
+  dirFromPrev[nodeIndex][parent] = inDir;
   while(detectnode() == false) {
     straight();
     delay(20);
@@ -325,9 +343,6 @@ void getNode(int inDir) {
   //Serial.print(currentdirection);
   Serial.print("Getting node");
   Serial.println();
-  Serial.print("In direction  ");
-  Serial.print(inDir);
-  Serial.println();
   turnToDir(currentdirection,inDir);
   while(detectnode()==false) {
     straight();
@@ -336,11 +351,11 @@ void getNode(int inDir) {
   Serial.println("NODE");
   delay(100);
   stopSignal();
-  if(isvisit(presentx, presenty)==true) {
+  if(isvisit(presentx, presenty,inDir)==true) {
     getBackPrevNode(inDir);
     return;
   }
-  int nodeIndex = updateNodeData(inDir);
+  nodeIndex = updateNodeData(inDir);
   /*Serial.print('a');
   Serial.print("  ");
   Serial.print(nodeIndex);
@@ -360,41 +375,33 @@ void getNode(int inDir) {
   Serial.print("function2   ");
   Serial.print(presenty);*/
   //Serial.println();
-  int indir1 = nextDir(inDir,1);  
-  Serial.print("this1  ");
-  Serial.print(indir1);
-  Serial.println();  
+  int indir1 = nextDir(inDir,1);    
   if(isdir[nodeIndex][indir1]) {
     isdir[nodeIndex][indir1] = false;
     getNode(indir1);
   }
+  parent = nodeIndex;
   presentx=xcod[nodeIndex];
   presenty=ycod[nodeIndex];
-  Serial.print("in direction");
-  Serial.print(inDir);
-  Serial.println();
   if(isdir[nodeIndex][inDir]) {
     isdir[nodeIndex][inDir] = false;
     getNode(inDir);
   }
+  parent = nodeIndex;
   presentx=xcod[nodeIndex];
   presenty=ycod[nodeIndex];
   int indir2 = nextDir(inDir,2);
-  Serial.print("this2  ");
-  Serial.print(indir2);
-  Serial.println();
   if(isdir[nodeIndex][indir2]) {
     isdir[nodeIndex][indir2] = false;
     getNode(indir2);
   }
   presentx=xcod[nodeIndex];
   presenty=ycod[nodeIndex];
-  Serial.println("Going to previous node");
   getBackPrevNode(inDir);
 
 }
 
-bool isvisit(int newNodeX, int newNodeY) {
+bool isvisit(int newNodeX, int newNodeY,int inDir) {
   Serial.print("Checking if the node is visited or not");
   Serial.println();
   for(int i = 0; i < top; i++){
@@ -402,6 +409,12 @@ bool isvisit(int newNodeX, int newNodeY) {
       Serial.print("Visited");
       Serial.println();
       isdir[i][oppDir(currentdirection)]=false;
+      int x = xcod[i]-xcod[parent];
+      int y = ycod[i]-ycod[parent];
+      path[i][parent] = sqrt(sq(x)+sq(y));//square root of ((xcod of nodeindex - xcod of parent)^2 + (ycod of nodeindex - ycod of parent)^2)  i.e., distance between two points
+      path[parent][i] = sqrt(sq(x)+sq(y));//square root of ((xcod of nodeindex - xcod of parent)^2 + (ycod of nodeindex - ycod of parent)^2)  i.e., distance between two points
+      dirFromPrev[parent][i] = inDir;
+      dirFromPrev[i][parent] = oppDir(inDir);
       return true;
     }
   }
@@ -412,7 +425,6 @@ bool isvisit(int newNodeX, int newNodeY) {
 
 
 int turnToDir(int currDir,int finalDir){
-  Serial.print("Turning to Direction.........");
   if(currDir == finalDir) return;
   /*Serial.print("Currentdir    ");
   Serial.print(currDir);
@@ -458,7 +470,6 @@ int turnToDir(int currDir,int finalDir){
 
 
 int  nextDir(int currDir, int turn ) {
-  Serial.print("My next direction is..........");
   if(currDir==0&&turn==0)
     return 0;
   if(currDir==0&&turn==1)
@@ -504,4 +515,56 @@ int oppDir(int currDir) {
   if(currDir == 1)return 0;
   if(currDir == 2)return 3;
   if(currDir == 3)return 2;
+}
+int shortpath(int s){
+  if(parent1[s] == -1)
+    return;
+    //sPath[parent1] = s;
+    shortpath(parent1[s]);
+    sPath[indexSpath] = s;
+    indexSpath++;
+}
+int dijkstra(){
+  int s=0,i=0,dist[100];
+  for(int i=0;i<nodeIndex;i++){
+    dist[i] = MAX;
+  }
+  parent1[0] = -1;
+  dist[s]=0;
+  int visit[100];
+  for(int i=0;i<nodeIndex;i++){
+    visit[i] = 0;
+  }
+  while(s != finalNode){
+    visit[s]=1;
+    int maxdis = MAX;
+    int indx = -1;
+    for(int j=0;j<nodeIndex;j++){
+      if(dist[j]>dist[s]+path[s][j]){
+        dist[j]=dist[s]+path[s][j];
+        parent1[j]=s;
+      }
+      if(MAX > dist[j]&&visit[j]==0){
+        maxdis = dist[j];
+        indx = j;
+      }
+    }
+    s=indx;
+  }
+  shortpath(finalNode);
+}
+int take(int nodeA,int nodeB){
+  turnToDir(currentdirection,dirFromPrev[nodeB][nodeA]);
+  while(detectnode()==false) {
+    straight();
+    delay(20);
+  }
+  delay(100);
+  stopSignal();
+}
+void final_shortest_path(){
+  currentdirection = 0;
+  for(int i = 1; i < indexSpath; i++){
+    take(sPath[i-1],sPath[i]);
+  }
 }
