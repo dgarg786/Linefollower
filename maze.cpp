@@ -1,5 +1,7 @@
+// North : 0 , South : 1 , East : 2 , West : 3
+// tstraight:0 tLeft : 1 ; tright : 2   tabout : 3
 
-at Kp=175,Ki=0,Kd=100;
+float Kp=175,Ki=0,Kd=100;
 float error=0, P=0, I=0, D=0, PID_value=0;
 float previous_error=0, previous_I=0;
 int sensor[5]={0, 0, 0, 0, 0};
@@ -503,4 +505,3 @@ int oppDir(int currDir) {
   if(currDir == 2)return 3;
   if(currDir == 3)return 2;
 }
-
